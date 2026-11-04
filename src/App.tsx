@@ -162,7 +162,7 @@ export function App() {
           if (mounted) setNotifications(notifs);
         });
 
-        fetchLiveVehicles(loadedData).then(vehs => {
+        fetchLiveVehicles(loadedData, loadedShapes).then(vehs => {
           if (mounted) setLiveVehicles(vehs);
         });
 
@@ -221,7 +221,7 @@ export function App() {
     const interval = window.setInterval(() => {
       setRefreshSecondsLeft(prev => {
         if (prev <= 1) {
-          fetchLiveVehicles(data).then(vehs => {
+          fetchLiveVehicles(data, shapes).then(vehs => {
             if (vehs.length > 0) setLiveVehicles(vehs);
           });
           return REFRESH_CYCLE_SECONDS;
@@ -231,7 +231,7 @@ export function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [data]);
+  }, [data, shapes]);
 
   const handleSelectPanel = useCallback(
     (panel: ActivePanel) => {
@@ -408,6 +408,8 @@ export function App() {
   }, []);
 
   const handleRequestMyLocation = useCallback(async () => {
+    setPickingPlannerTarget(null);
+    setPickingFavMap(false);
     const loc = await obtainCoords();
     if (loc) {
       setUserLocation(loc);
@@ -419,6 +421,7 @@ export function App() {
 
   const handleUseCurrentLocationForPlanner = useCallback(
     async (target: 'from' | 'to') => {
+      setPickingPlannerTarget(null);
       const loc = (await obtainCoords()) || userLocation;
       if (!loc) {
         showToast('Activează permisiunea de locație sau alege un punct pe hartă.');
@@ -431,10 +434,15 @@ export function App() {
         lng: loc.lng,
         isCurrentLocation: true
       };
-      if (target === 'from') setFromPoint(pt);
-      else setToPoint(pt);
+      if (target === 'from') {
+        setFromPoint(pt);
+        if (!toPoint) focusMap(loc.lat, loc.lng, 16);
+      } else {
+        setToPoint(pt);
+        if (!fromPoint) focusMap(loc.lat, loc.lng, 16);
+      }
     },
-    [obtainCoords, userLocation, t, showToast]
+    [obtainCoords, userLocation, t, showToast, fromPoint, toPoint, focusMap]
   );
 
   const handleDirectionsToTarget = useCallback(

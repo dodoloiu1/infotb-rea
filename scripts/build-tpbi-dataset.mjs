@@ -158,7 +158,6 @@ async function main() {
   };
 
   for (const [rid, sname] of routeRows) addMapping(rid, sname);
-  for (const l of stbsaLines) addMapping(String(l.id), String(l.name));
 
   const rawShapesByLine = new Map();
   for (const feat of routesGeo.features) {

@@ -239,6 +239,108 @@ input {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
 }
 
+/* Guarantee SVG/canvas overlays & GPS indicator NEVER intercept clicks on stations or UI */
+.leaflet-overlay-pane,
+.leaflet-overlay-pane svg,
+.leaflet-overlay-pane svg path,
+.leaflet-overlay-pane canvas,
+.stb-user-gps-div-icon,
+.stb-user-gps-dot,
+.stb-user-gps-pulse {
+  pointer-events: none !important;
+}
+
+/* === Station Ring Markers & Zoom-Out Station Clusters === */
+.stb-stop-div-icon {
+  background: transparent;
+  border: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.stb-stop-ring {
+  display: block;
+  border-radius: 50%;
+  border: 2.5px solid #df2027;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: none;
+}
+
+.stb-stop-div-icon:hover .stb-stop-ring,
+.stb-stop-ring.selected {
+  transform: scale(1.18);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.34);
+}
+
+.stb-cluster-div-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.stb-stop-cluster {
+  border-radius: 50%;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+  pointer-events: none;
+}
+
+.stb-cluster-div-icon:hover .stb-stop-cluster {
+  transform: scale(1.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.38);
+}
+
+/* === Non-Interactive User GPS Blue Dot === */
+.stb-user-gps-div-icon {
+  background: transparent;
+  border: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.stb-user-gps-dot {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3559d9;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.38);
+}
+
+.stb-user-gps-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: rgba(53, 89, 217, 0.26);
+  animation: stbGpsPulse 2.2s ease-out infinite;
+}
+
+@keyframes stbGpsPulse {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
 /* === Official Bottom-Left Map Controllers (.map_controllers) === */
 .map_controllers {
   position: absolute;

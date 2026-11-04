@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import L from 'leaflet';
 import type {
   FavoriteItem,
+  LineCategory,
   LineDirectionFilter,
   LiveVehicle,
   PlacePoint,
@@ -12,7 +13,7 @@ import type {
   TransitLine
 } from '../types';
 import type { Translations } from '../i18n/translations';
-import { getStationRingColor } from '../utils/geo';
+import { getStationRingColor, haversineMeters } from '../utils/geo';
 import {
   buildFlagPinHtml,
   buildVehicleMarkerHtml,
@@ -24,8 +25,94 @@ import {
 const BUCHAREST_CENTER: [number, number] = [44.4353, 26.0997];
 const DEFAULT_ZOOM = 15;
 
+// Minimum zoom to display any stops/clusters. At zoom <= 13 (covering >15% of Bucharest-Ilfov), hide all points.
+const MIN_STOPS_VISIBLE_ZOOM = 14;
+
 const OSM_PRIMARY_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_HOT_FALLBACK_URL = 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png';
+
+interface StopCluster {
+  lat: number;
+  lng: number;
+  stops: StopItem[];
+  dominantCategory: LineCategory;
+}
+
+/**
+ * Fast pixel-grid spatial clustering for visible stops.
+ * - `radiusPx <= 0`: no clustering (every stop rendered individually at zoom >= 16)
+ * - `radiusPx > 0`: groups nearby stops within `radiusPx` screen pixels
+ */
+function clusterVisibleStops(
+  map: L.Map,
+  stops: StopItem[],
+  selectedStopCode: string | undefined,
+  radiusPx: number
+): StopCluster[] {
+  if (radiusPx <= 0) {
+    return stops.map(s => ({
+      lat: s.lat,
+      lng: s.lng,
+      stops: [s],
+      dominantCategory: s.m
+    }));
+  }
+
+  const projected = stops.map(s => {
+    const pt = map.latLngToContainerPoint([s.lat, s.lng]);
+    return { stop: s, x: pt.x, y: pt.y, used: false };
+  });
+
+  // Ensure currently selected stop stays an individual clickable ring if possible
+  const clusters: StopCluster[] = [];
+  const rSq = radiusPx * radiusPx;
+
+  for (let i = 0; i < projected.length; i++) {
+    const seed = projected[i];
+    if (seed.used) continue;
+    seed.used = true;
+
+    if (selectedStopCode && seed.stop.c === selectedStopCode) {
+      clusters.push({
+        lat: seed.stop.lat,
+        lng: seed.stop.lng,
+        stops: [seed.stop],
+        dominantCategory: seed.stop.m
+      });
+      continue;
+    }
+
+    const members: StopItem[] = [seed.stop];
+    let sumLat = seed.stop.lat;
+    let sumLng = seed.stop.lng;
+    let domCat: LineCategory = seed.stop.m;
+
+    for (let j = i + 1; j < projected.length; j++) {
+      const cand = projected[j];
+      if (cand.used) continue;
+      if (selectedStopCode && cand.stop.c === selectedStopCode) continue;
+
+      const dx = cand.x - seed.x;
+      const dy = cand.y - seed.y;
+      if (dx * dx + dy * dy <= rSq) {
+        cand.used = true;
+        members.push(cand.stop);
+        sumLat += cand.stop.lat;
+        sumLng += cand.stop.lng;
+        if (cand.stop.m === 'METRO') domCat = 'METRO';
+      }
+    }
+
+    clusters.push({
+      lat: sumLat / members.length,
+      lng: sumLng / members.length,
+      stops: members,
+      dominantCategory: domCat
+    });
+  }
+
+  return clusters;
+}
 
 interface MapCanvasProps {
   data: StaticTransitData | null;
@@ -74,7 +161,6 @@ export function MapCanvas({
 }: MapCanvasProps) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const canvasRendererRef = useRef<L.Canvas | null>(null);
 
   const stopsLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
@@ -105,12 +191,9 @@ export function MapCanvas({
 
   const renderViewportStopsRef = useRef<() => void>(() => {});
 
-  // Initialize zero-API-key Leaflet map once
+  // Initialize zero-API-key Leaflet map once (preferCanvas: false prevents dual-canvas click blocking!)
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
-
-    const canvasRenderer = L.canvas({ padding: 0.5 });
-    canvasRendererRef.current = canvasRenderer;
 
     const map = L.map(mapElRef.current, {
       center: BUCHAREST_CENTER,
@@ -119,7 +202,7 @@ export function MapCanvas({
       maxZoom: 19,
       zoomControl: false,
       attributionControl: true,
-      preferCanvas: true
+      preferCanvas: false
     });
 
     map.attributionControl.setPrefix('');
@@ -151,10 +234,10 @@ export function MapCanvas({
 
     routesLayerRef.current = L.layerGroup().addTo(map);
     plannerLayerRef.current = L.layerGroup().addTo(map);
-    stopsLayerRef.current = L.layerGroup().addTo(map);
-    favPlacesLayerRef.current = L.layerGroup().addTo(map);
-    vehiclesLayerRef.current = L.layerGroup().addTo(map);
     userLayerRef.current = L.layerGroup().addTo(map);
+    favPlacesLayerRef.current = L.layerGroup().addTo(map);
+    stopsLayerRef.current = L.layerGroup().addTo(map);
+    vehiclesLayerRef.current = L.layerGroup().addTo(map);
 
     map.on('click', (ev: L.LeafletMouseEvent) => {
       if (latestRef.current.pickingMapMode) {
@@ -167,8 +250,10 @@ export function MapCanvas({
 
     mapRef.current = map;
 
-    // Ensure proper Leaflet sizing after layout mount
-    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 120);
+    const resizeTimer = window.setTimeout(() => {
+      map.invalidateSize();
+      renderViewportStopsRef.current();
+    }, 120);
 
     return () => {
       clearTimeout(resizeTimer);
@@ -177,20 +262,27 @@ export function MapCanvas({
     };
   }, []);
 
-  // Viewport-culled official 16x16px ring station markers
+  // Viewport-culled & zoom-clustered station markers (hiding completely when zoomed out >15% of Bucharest)
   renderViewportStopsRef.current = () => {
     const map = mapRef.current;
     const stopsLayer = stopsLayerRef.current;
-    const renderer = canvasRendererRef.current;
     const cur = latestRef.current;
 
-    if (!map || !stopsLayer || !renderer || !cur.data) return;
+    if (!map || !stopsLayer || !cur.data) return;
     stopsLayer.clearLayers();
 
     const zoom = map.getZoom();
-    const bounds = map.getBounds().pad(0.18);
+    const rawBounds = map.getBounds();
 
-    // Collect stop codes belonging to currently selected lines so they always show
+    // 15% Bucharest cutoff: at zoom < 14 (zoom <= 13 covers >15% of Bucharest-Ilfov),
+    // hide all station points & clusters completely; they automatically reappear on zoom-in (zoom >= 14).
+    if (zoom < MIN_STOPS_VISIBLE_ZOOM) {
+      return;
+    }
+
+    const paddedBounds = rawBounds.pad(0.12);
+
+    // If lines are selected, prioritize stops on those selected lines when zoomed out to 14
     const lineStopSet = new Set<string>();
     for (const lName of cur.selectedLineNames) {
       const lObj = cur.data.lineByName.get(lName);
@@ -203,51 +295,98 @@ export function MapCanvas({
       }
     }
 
+    const visibleStops: StopItem[] = [];
     for (const stop of cur.data.stops) {
-      const isSelected = cur.selectedStop?.c === stop.c;
-      const isOnActiveLine = lineStopSet.has(stop.c);
-
-      if (!isSelected && !isOnActiveLine) {
-        if (cur.selectedLineNames.length > 0) {
-          // When lines are selected, dim or hide unrelated stops at low zoom for clarity
-          if (zoom < 15) continue;
-        } else {
-          // On default map view: show Metro at zoom >= 12, all stops at zoom >= 13
-          if (stop.m === 'METRO' ? zoom < 12 : zoom < 13) continue;
-        }
-        if (!bounds.contains([stop.lat, stop.lng])) continue;
+      if (!paddedBounds.contains([stop.lat, stop.lng])) continue;
+      if (cur.selectedLineNames.length > 0 && zoom < 15 && !lineStopSet.has(stop.c) && cur.selectedStop?.c !== stop.c) {
+        continue;
       }
+      visibleStops.push(stop);
+    }
 
-      const ringColor = getStationRingColor(stop.m);
-      const radius = isSelected ? 8.5 : zoom >= 16 ? 7 : 6.2;
+    if (visibleStops.length === 0) return;
 
-      const marker = L.circleMarker([stop.lat, stop.lng], {
-        renderer,
-        radius,
-        color: ringColor,
-        weight: isSelected ? 3 : 2.3,
-        fillColor: isSelected ? ringColor : '#ffffff',
-        fillOpacity: 1
-      });
+    // Determine pixel clustering radius based on zoom:
+    // - zoom >= 16: 0px (every station is an individual clickable ring!)
+    // - zoom === 15: 36px (merges dense multi-stop hubs & paired stops into clusters, standalone stops stay individual)
+    // - zoom === 14: 85px (clean neighborhood clusters across the visible sector)
+    const clusterRadiusPx = zoom >= 16 ? 0 : zoom >= 15 ? 36 : 85;
 
-      marker.on('click', ev => {
-        L.DomEvent.stopPropagation(ev);
-        if (latestRef.current.pickingMapMode) {
-          latestRef.current.onMapClickPick(stop.lat, stop.lng);
-        } else {
-          latestRef.current.onSelectStop(stop);
-        }
-      });
+    const clusters = clusterVisibleStops(
+      map,
+      visibleStops,
+      cur.selectedStop?.c,
+      clusterRadiusPx
+    );
 
-      if (zoom >= 15 || isSelected || isOnActiveLine) {
-        marker.bindTooltip(stop.n, {
-          direction: 'top',
-          offset: [0, -6],
-          className: 'stb-stop-tooltip'
+    for (const item of clusters) {
+      if (item.stops.length === 1) {
+        const stop = item.stops[0];
+        const isSelected = cur.selectedStop?.c === stop.c;
+        const ringColor = getStationRingColor(stop.m);
+        const sizePx = isSelected ? 18 : zoom >= 16 ? 15 : 13;
+
+        const marker = L.marker([stop.lat, stop.lng], {
+          zIndexOffset: isSelected ? 550 : 220,
+          icon: L.divIcon({
+            className: 'stb-stop-div-icon',
+            html: `<span class="stb-stop-ring ${isSelected ? 'selected' : ''}" style="width:${sizePx}px;height:${sizePx}px;border-color:${ringColor};background:${
+              isSelected ? ringColor : '#ffffff'
+            }"></span>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          })
         });
-      }
 
-      marker.addTo(stopsLayer);
+        marker.on('click', (ev: L.LeafletMouseEvent) => {
+          if (ev.originalEvent) {
+            L.DomEvent.stopPropagation(ev.originalEvent);
+          }
+          if (latestRef.current.pickingMapMode) {
+            latestRef.current.onMapClickPick(stop.lat, stop.lng);
+          } else {
+            latestRef.current.onSelectStop(stop);
+          }
+        });
+
+        if (zoom >= 15 || isSelected) {
+          marker.bindTooltip(stop.n, {
+            direction: 'top',
+            offset: [0, -9],
+            className: 'stb-stop-tooltip'
+          });
+        }
+
+        marker.addTo(stopsLayer);
+      } else {
+        // Render interactive station cluster badge
+        const count = item.stops.length;
+        const size = count >= 20 ? 38 : count >= 8 ? 34 : 29;
+        const ringColor =
+          item.dominantCategory === 'METRO' ? '#1b6e2b' : '#33aa44';
+
+        const clusterMarker = L.marker([item.lat, item.lng], {
+          zIndexOffset: 340,
+          icon: L.divIcon({
+            className: 'stb-cluster-div-icon',
+            html: `<div class="stb-stop-cluster" style="width:${size}px;height:${size}px;background:${ringColor}"><span>${count}</span></div>`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2]
+          })
+        });
+
+        clusterMarker.on('click', (ev: L.LeafletMouseEvent) => {
+          if (ev.originalEvent) {
+            L.DomEvent.stopPropagation(ev.originalEvent);
+          }
+          const curZoom = map.getZoom();
+          const nextZoom = Math.min(17, curZoom + (curZoom <= 14 ? 2 : 1));
+          map.stop();
+          map.setView([item.lat, item.lng], nextZoom, { animate: true });
+        });
+
+        clusterMarker.addTo(stopsLayer);
+      }
     }
   };
 
@@ -278,7 +417,6 @@ export function MapCanvas({
 
       const drawBranch = (coords: [number, number][] | undefined, dashed: boolean) => {
         if (!coords || coords.length < 2) return;
-        // White casing underneath + colored line on top (1:1 info.stb.ro style)
         L.polyline(coords, {
           color: '#ffffff',
           weight: 7,
@@ -380,18 +518,21 @@ export function MapCanvas({
             color: '#58586b',
             weight: 4,
             dashArray: '6, 8',
-            opacity: 0.9
+            opacity: 0.9,
+            interactive: false
           }).addTo(plannerLayer);
         } else {
           L.polyline(leg.geometry, {
             color: '#ffffff',
             weight: 8,
-            opacity: 0.95
+            opacity: 0.95,
+            interactive: false
           }).addTo(plannerLayer);
           L.polyline(leg.geometry, {
             color: leg.color || '#33AA44',
             weight: 5,
-            opacity: 0.95
+            opacity: 0.95,
+            interactive: false
           }).addTo(plannerLayer);
         }
         for (const pt of leg.geometry) fitPts.push(pt);
@@ -466,42 +607,62 @@ export function MapCanvas({
     }
   }, [favorites]);
 
-  // Render user GPS blue dot + accuracy circle
+  // Render user GPS blue dot + accuracy circle (strictly non-interactive so it NEVER blocks station clicks!)
   useEffect(() => {
     const userLayer = userLayerRef.current;
     if (!userLayer) return;
     userLayer.clearLayers();
     if (!userLocation) return;
 
-    if (userLocation.accuracy && userLocation.accuracy < 1500) {
+    if (userLocation.accuracy && userLocation.accuracy > 10 && userLocation.accuracy < 1200) {
       L.circle([userLocation.lat, userLocation.lng], {
         radius: userLocation.accuracy,
         color: '#3559d9',
         weight: 1,
         fillColor: '#3559d9',
-        fillOpacity: 0.12,
+        fillOpacity: 0.1,
         interactive: false
       }).addTo(userLayer);
     }
 
-    L.circleMarker([userLocation.lat, userLocation.lng], {
-      radius: 7,
-      color: '#ffffff',
-      weight: 2.5,
-      fillColor: '#3559d9',
-      fillOpacity: 1
+    L.marker([userLocation.lat, userLocation.lng], {
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 100,
+      icon: L.divIcon({
+        className: 'stb-user-gps-div-icon',
+        html: '<span class="stb-user-gps-dot"><span class="stb-user-gps-pulse"></span></span>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      })
     }).addTo(userLayer);
   }, [userLocation]);
 
-  // Execute programmatic map focus commands
+  // Execute programmatic map focus commands safely (avoiding flyTo floating-point edge cases on short hops)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapFocusCommand) return;
-    map.flyTo(
-      [mapFocusCommand.lat, mapFocusCommand.lng],
-      mapFocusCommand.zoom ?? Math.max(map.getZoom(), 16),
-      { duration: 0.55 }
+    const targetZoom = mapFocusCommand.zoom ?? Math.max(map.getZoom(), 16);
+    const curCenter = map.getCenter();
+    const dist = haversineMeters(
+      curCenter.lat,
+      curCenter.lng,
+      mapFocusCommand.lat,
+      mapFocusCommand.lng
     );
+
+    map.stop();
+    if (dist < 180) {
+      map.setView([mapFocusCommand.lat, mapFocusCommand.lng], targetZoom, { animate: true });
+      const tId = window.setTimeout(() => renderViewportStopsRef.current(), 300);
+      return () => clearTimeout(tId);
+    } else {
+      map.flyTo([mapFocusCommand.lat, mapFocusCommand.lng], targetZoom, {
+        duration: 0.45
+      });
+      const tId = window.setTimeout(() => renderViewportStopsRef.current(), 520);
+      return () => clearTimeout(tId);
+    }
   }, [mapFocusCommand]);
 
   const primaryLine: TransitLine | undefined =

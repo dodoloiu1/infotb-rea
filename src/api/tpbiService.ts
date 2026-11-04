@@ -130,12 +130,10 @@ function resolveLineNameFromRouteId(
   const rid = String(rawRouteId || '').trim();
   if (!rid) return undefined;
   if (data.routeIdToName[rid]) return data.routeIdToName[rid];
-  if (data.lineByName.has(rid)) return rid;
-  const pvMatch = rid.match(/_(\d+[A-Z]?)$/i);
+  const pvMatch = rid.match(/^PV\d+_(\d+[A-Z]?)$/i) || rid.match(/_(\d+[A-Z]?)$/i);
   if (pvMatch) {
     const suffix = pvMatch[1];
     if (data.routeIdToName[suffix]) return data.routeIdToName[suffix];
-    if (data.lineByName.has(suffix)) return suffix;
   }
   return undefined;
 }
@@ -166,11 +164,18 @@ interface RawBusDataEntity {
   };
 }
 
+// Max GPS timestamp staleness (4 minutes) & max perpendicular distance from route polyline (150m)
+const MAX_VEHICLE_STALE_SEC = 240;
+const MAX_OFF_ROUTE_METERS = 150;
+
 /**
  * Fetches live GPS vehicles from TPBI (`https://maps.mo-bi.ro/api/busData`).
- * Supports CORS `*` directly on Web/GitHub Pages AND native Android HTTP.
+ * Filters out stale parked depot units (>4 min old) and reassigned off-route AVL units (>150m off polyline).
  */
-export async function fetchLiveVehicles(data: StaticTransitData): Promise<LiveVehicle[]> {
+export async function fetchLiveVehicles(
+  data: StaticTransitData,
+  shapes?: RouteShapesMap | null
+): Promise<LiveVehicle[]> {
   const url = `${TPBI_ORIGIN}/api/busData`;
 
   const payload = await fetchJsonWithTimeout<RawBusDataEntity[] | { entity?: RawBusDataEntity[] }>(
@@ -188,6 +193,13 @@ export async function fetchLiveVehicles(data: StaticTransitData): Promise<LiveVe
     return [];
   }
 
+  // Reference feed clock from newest vehicle timestamp so device clock skew cannot cause false drops
+  let feedRefTs = 0;
+  for (const ent of list) {
+    const ts = Number(ent.vehicle?.timestamp || 0);
+    if (isFinite(ts) && ts > feedRefTs) feedRefTs = ts;
+  }
+
   const out: LiveVehicle[] = [];
   for (const ent of list) {
     const v = ent.vehicle;
@@ -195,6 +207,11 @@ export async function fetchLiveVehicles(data: StaticTransitData): Promise<LiveVe
     const lat = Number(v.position.latitude);
     const lng = Number(v.position.longitude);
     if (!isFinite(lat) || !isFinite(lng) || lat < 44.0 || lat > 45.0 || lng < 25.5 || lng > 26.8) {
+      continue;
+    }
+
+    const vTs = Number(v.timestamp || 0);
+    if (vTs > 0 && feedRefTs > 0 && feedRefTs - vTs > MAX_VEHICLE_STALE_SEC) {
       continue;
     }
 
@@ -210,7 +227,32 @@ export async function fetchLiveVehicles(data: StaticTransitData): Promise<LiveVe
 
     const line = data.lineByName.get(lineName);
     const rawDir = v.trip?.directionId ?? v.trip?.direction_id;
-    const dir: 0 | 1 = Number(rawDir) === 1 ? 1 : 0;
+    let dir: 0 | 1 = Number(rawDir) === 1 ? 1 : 0;
+
+    // Strict route-corridor check: discard buses reassigned to other lines (e.g. 182 at Roma / 381 at Universitate) or parked in depots
+    const lineShapes = shapes?.[lineName];
+    const poly0 = lineShapes?.['0'];
+    const poly1 = lineShapes?.['1'];
+    if ((poly0 && poly0.length >= 2) || (poly1 && poly1.length >= 2)) {
+      const perp0 =
+        poly0 && poly0.length >= 2
+          ? projectMetersAlongPolyline(lat, lng, poly0).perpMeters
+          : Infinity;
+      const perp1 =
+        poly1 && poly1.length >= 2
+          ? projectMetersAlongPolyline(lat, lng, poly1).perpMeters
+          : Infinity;
+      const minPerp = Math.min(perp0, perp1);
+      if (minPerp > MAX_OFF_ROUTE_METERS) {
+        continue;
+      }
+      if (dir === 0 && perp0 > MAX_OFF_ROUTE_METERS && perp1 <= 90) {
+        dir = 1;
+      } else if (dir === 1 && perp1 > MAX_OFF_ROUTE_METERS && perp0 <= 90) {
+        dir = 0;
+      }
+    }
+
     const vid = String(ent.id || v.vehicle?.id || `${lineName}-${lat}-${lng}`);
     const label = String(v.vehicle?.label || v.vehicle?.id || vid).trim();
     const licensePlate = String(v.vehicle?.licensePlate ?? v.vehicle?.license_plate ?? '').trim();
