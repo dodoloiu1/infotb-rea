@@ -118,6 +118,9 @@ export function FixSideNav({
           >
             <EnFlagSvg />
           </button>
+          <span class="appVersionBadge" title="InfoTB REA v1.1">
+            {t.appVersion}
+          </span>
         </div>
       </div>
     </aside>

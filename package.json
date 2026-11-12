@@ -1,6 +1,6 @@
 {
   "name": "infotb-rea",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "InfoTB București–Ilfov (REA Remake) — aplicație ușoară Web & Android bazată pe TPBI API, fără login și fără plăți, cu hartă integrată fără cheie API.",
   "type": "module",

@@ -59,8 +59,47 @@ export function LinesDrawer({
         </div>
 
         <div class="linesCounterContainer">
-          {t.linesSelectedCount(selectedLineNames.length)}
+          <span>{t.linesSelectedCount(selectedLineNames.length)}</span>
+          {selectedLineNames.length > 0 && (
+            <button
+              type="button"
+              class="textLinkBtn textDanger"
+              onClick={onResetLines}
+              title={t.clearAllLines}
+            >
+              {t.clearAllLines}
+            </button>
+          )}
         </div>
+
+        {selectedLineNames.length > 0 && (
+          <div class="drawerActiveLinesRow">
+            {selectedLineNames.map(lName => {
+              const lineObj = lines.find(l => l.name === lName);
+              const color = lineObj?.color || '#0070c0';
+              return (
+                <span
+                  key={lName}
+                  class="activeLineChip"
+                  style={{ backgroundColor: color }}
+                >
+                  <span class="activeLineChipName">{lName}</span>
+                  <button
+                    type="button"
+                    class="activeLineRemoveBtn"
+                    title={t.removeLine(lName)}
+                    aria-label={t.removeLine(lName)}
+                    onClick={() => {
+                      if (lineObj) onToggleLine(lineObj);
+                    }}
+                  >
+                    <CloseXSvg size={12} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div class="lines-success-container">

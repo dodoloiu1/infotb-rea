@@ -17,6 +17,7 @@ import { getStationRingColor, haversineMeters } from '../utils/geo';
 import {
   buildFlagPinHtml,
   buildVehicleMarkerHtml,
+  CloseXSvg,
   CrosshairSvg,
   ZoomMinusSvg,
   ZoomPlusSvg
@@ -135,6 +136,9 @@ interface MapCanvasProps {
   onDragEndpoint: (which: 'from' | 'to', lat: number, lng: number) => void;
   onChangeDirectionFilter: (dir: LineDirectionFilter) => void;
   onRequestMyLocation: () => void;
+  onRemoveLine?: (lineName: string) => void;
+  onResetLines?: () => void;
+  onInspectLine?: (line: TransitLine) => void;
 }
 
 export function MapCanvas({
@@ -157,7 +161,10 @@ export function MapCanvas({
   onMapClickPick,
   onDragEndpoint,
   onChangeDirectionFilter,
-  onRequestMyLocation
+  onRequestMyLocation,
+  onRemoveLine,
+  onResetLines,
+  onInspectLine
 }: MapCanvasProps) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -711,13 +718,63 @@ export function MapCanvas({
         </div>
       </div>
 
-      {/* Official bottom-center direction switcher (.directionButtonContainer) when line(s) are selected */}
+      {/* Official bottom-center direction switcher & active lines toolbar */}
       {selectedLineNames.length > 0 && (
         <div
           class={`direction-button-container-wrapper ${
             rightCardOpen ? 'withRightCard' : ''
           }`}
         >
+          {/* Floating active lines chip bar with individual remove buttons + clear all */}
+          <div class="activeLinesBar">
+            <span class="activeLinesLabel">
+              {t.activeLinesHeader(selectedLineNames.length)}:
+            </span>
+            <div class="activeLinesScroll">
+              {selectedLineNames.map(lName => {
+                const lineObj = data?.lineByName.get(lName);
+                const color = lineObj?.color || '#0070c0';
+                return (
+                  <span
+                    key={lName}
+                    class="activeLineChip"
+                    style={{ backgroundColor: color }}
+                    title={`${lName}: ${lineObj ? lineObj.d0.to + ' ↔ ' + lineObj.d1.to : ''}`}
+                  >
+                    <span
+                      class="activeLineChipName"
+                      onClick={() => lineObj && onInspectLine?.(lineObj)}
+                    >
+                      {lName}
+                    </span>
+                    <button
+                      type="button"
+                      class="activeLineRemoveBtn"
+                      title={t.removeLine(lName)}
+                      aria-label={t.removeLine(lName)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onRemoveLine?.(lName);
+                      }}
+                    >
+                      <CloseXSvg size={12} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              class="activeLinesClearAllBtn"
+              title={t.clearAllLines}
+              aria-label={t.clearAllLines}
+              onClick={onResetLines}
+            >
+              <span>{t.clearAllLines}</span>
+            </button>
+          </div>
+
           <div class="directionButtonContainer">
             <button
               type="button"

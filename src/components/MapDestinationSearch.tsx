@@ -8,9 +8,11 @@ interface MapDestinationSearchProps {
   data: StaticTransitData | null;
   favorites: FavoriteItem[];
   history: PlacePoint[];
+  selectedLineNames?: string[];
   t: Translations;
   onSelectStop: (stop: StopItem) => void;
   onSelectLine: (line: TransitLine) => void;
+  onToggleLine?: (line: TransitLine) => void;
   onSelectPlaceForDirections: (place: PlacePoint) => void;
   onToggleFavoriteStop: (stop: StopItem) => void;
   onToggleFavoriteLine: (line: TransitLine) => void;
@@ -21,9 +23,11 @@ export function MapDestinationSearch({
   data,
   favorites,
   history,
+  selectedLineNames = [],
   t,
   onSelectStop,
   onSelectLine,
+  onToggleLine,
   onSelectPlaceForDirections,
   onToggleFavoriteStop,
   onToggleFavoriteLine,
@@ -155,44 +159,62 @@ export function MapDestinationSearch({
                     <div class="searchSection">
                       <div class="searchSectionHeader">{t.linesGroup}</div>
                       <div class="listContainer">
-                        {results.lines.map(line => (
-                          <div key={line.name} class="placeContainer">
-                            <span
-                              class="linePillMini"
-                              style={{ backgroundColor: line.color }}
-                              onClick={() => {
-                                setFocused(false);
-                                setQuery('');
-                                onSelectLine(line);
-                              }}
-                            >
-                              {line.name}
-                            </span>
-                            <div
-                              class="textCont"
-                              onClick={() => {
-                                setFocused(false);
-                                setQuery('');
-                                onSelectLine(line);
-                              }}
-                            >
-                              <div class="name">
-                                {line.d0.to} ↔ {line.d1.to}
+                        {results.lines.map(line => {
+                          const isSelected = selectedLineNames.includes(line.name);
+                          return (
+                            <div key={line.name} class={`placeContainer ${isSelected ? 'selectedLineRow' : ''}`}>
+                              <span
+                                class="linePillMini"
+                                style={{ backgroundColor: line.color }}
+                                onClick={() => {
+                                  setFocused(false);
+                                  setQuery('');
+                                  onSelectLine(line);
+                                }}
+                              >
+                                {line.name}
+                              </span>
+                              <div
+                                class="textCont"
+                                onClick={() => {
+                                  setFocused(false);
+                                  setQuery('');
+                                  onSelectLine(line);
+                                }}
+                              >
+                                <div class="name">
+                                  {line.d0.to} ↔ {line.d1.to}
+                                </div>
                               </div>
+                              <button
+                                type="button"
+                                class="favoriteCont"
+                                title={isSelected ? t.removeLine(line.name) : t.activeLinesHeader(1)}
+                                aria-label={isSelected ? t.removeLine(line.name) : t.activeLinesHeader(1)}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (onToggleLine) onToggleLine(line);
+                                  else onSelectLine(line);
+                                }}
+                              >
+                                <span class={isSelected ? 'activeCheckmarkBadge' : 'addLinePlusBadge'}>
+                                  {isSelected ? '✓' : '+'}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                class="favoriteCont"
+                                aria-label={t.saveFavorite}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  onToggleFavoriteLine(line);
+                                }}
+                              >
+                                <StarSvg filled={isLineFav(line.name)} size={18} />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              class="favoriteCont"
-                              aria-label={t.saveFavorite}
-                              onClick={e => {
-                                e.stopPropagation();
-                                onToggleFavoriteLine(line);
-                              }}
-                            >
-                              <StarSvg filled={isLineFav(line.name)} size={18} />
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

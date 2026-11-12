@@ -389,7 +389,7 @@ input {
   margin: 0 4px;
 }
 
-/* === Official Bottom-Center Direction Switcher (.directionButtonContainer) === */
+/* === Official Bottom-Center Direction Switcher & Active Lines Bar === */
 .direction-button-container-wrapper {
   position: absolute;
   bottom: 24px;
@@ -397,11 +397,121 @@ input {
   transform: translateX(-50%);
   z-index: 850;
   max-width: calc(100% - 110px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   transition: left 0.2s ease;
 }
 
 .direction-button-container-wrapper.withRightCard {
   left: calc(50% - 190px);
+}
+
+/* === Floating Active Lines Toolbar (Multi-line chips + Clear all) === */
+.activeLinesBar {
+  display: flex;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 24px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+  gap: 8px;
+  max-width: min(86vw, 760px);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.activeLinesScroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.activeLinesScroll::-webkit-scrollbar {
+  display: none;
+}
+
+.activeLinesLabel {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--theme-accent-400);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.activeLineChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  user-select: none;
+  flex-shrink: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.activeLineChip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
+}
+
+.activeLineChipName {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.activeLineRemoveBtn {
+  border: none;
+  background: rgba(0, 0, 0, 0.22);
+  color: #ffffff;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.activeLineRemoveBtn:hover {
+  background: rgba(0, 0, 0, 0.45);
+  transform: scale(1.1);
+}
+
+.activeLinesClearAllBtn {
+  border: none;
+  background: #fbebee;
+  color: #df2027;
+  font-size: 11.5px;
+  font-weight: 700;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.activeLinesClearAllBtn:hover {
+  background: #f8d7da;
+  color: #b01b21;
 }
 
 .directionButtonContainer {
@@ -724,9 +834,73 @@ input {
   margin-top: 10px;
   margin-bottom: 6px;
   color: var(--theme-accent-500);
-  text-align: right;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 12.5px;
   font-weight: 500;
+}
+
+.drawerActiveLinesRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border: 1px solid var(--theme-accent-100);
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.selectedLineRow {
+  background-color: #f3f9f4;
+}
+
+.activeCheckmarkBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--theme-primary-500);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.addLinePlusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #f3f3f4;
+  color: var(--theme-accent-600);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background-color 0.15s ease;
+}
+
+.addLinePlusBadge:hover {
+  background-color: #e5e7eb;
+}
+
+.textDanger {
+  color: #df2027 !important;
+}
+
+.appVersionBadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+  user-select: none;
 }
 
 .lines-success-container {

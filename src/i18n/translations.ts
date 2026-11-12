@@ -31,6 +31,10 @@ export interface Translations {
   deselectLines: (count: number) => string;
   resetSelectedLines: string;
   linesLimitWarning: (limit: number) => string;
+  activeLinesHeader: (count: number) => string;
+  removeLine: (name: string) => string;
+  clearAllLines: string;
+  appVersion: string;
   catTram: string;
   catTrolley: string;
   catBus: string;
@@ -165,10 +169,14 @@ export const TRANSLATIONS: Record<LangCode, Translations> = {
 
     searchLinePlaceholder: 'Caută linie...',
     linesSelectedCount: (n: number) =>
-      n === 0 ? 'Selectează până la 3 linii' : n === 1 ? '1 linie selectată' : `${n} linii selectate`,
+      n === 0 ? 'Selectează linii' : n === 1 ? '1 linie selectată' : `${n} linii selectate`,
     deselectLines: (n: number) => (n === 1 ? 'Deselectează 1 linie' : `Deselectează ${n} linii`),
     resetSelectedLines: 'Resetează liniile selectate',
-    linesLimitWarning: (limit: number) => `Ați depășit limita de linii selectate: ${limit}`,
+    linesLimitWarning: (limit: number) => `Ați atins limita de linii selectate: ${limit}`,
+    activeLinesHeader: (n: number) => `Linii active (${n})`,
+    removeLine: (name: string) => `Elimină linia ${name}`,
+    clearAllLines: 'Șterge toate',
+    appVersion: 'v1.1',
     catTram: 'Linii tramvai',
     catTrolley: 'Linii troleibuz',
     catBus: 'Linii autobuz',
@@ -299,10 +307,14 @@ export const TRANSLATIONS: Record<LangCode, Translations> = {
 
     searchLinePlaceholder: 'Search line...',
     linesSelectedCount: (n: number) =>
-      n === 0 ? 'Select up to 3 lines' : n === 1 ? '1 line selected' : `${n} lines selected`,
+      n === 0 ? 'Select lines' : n === 1 ? '1 line selected' : `${n} lines selected`,
     deselectLines: (n: number) => (n === 1 ? 'Deselect 1 line' : `Deselect ${n} lines`),
     resetSelectedLines: 'Reset selected lines',
     linesLimitWarning: (limit: number) => `Maximum selected lines limit reached: ${limit}`,
+    activeLinesHeader: (n: number) => `Active lines (${n})`,
+    removeLine: (name: string) => `Remove line ${name}`,
+    clearAllLines: 'Clear all',
+    appVersion: 'v1.1',
     catTram: 'Tram lines',
     catTrolley: 'Trolleybus lines',
     catBus: 'Bus lines',

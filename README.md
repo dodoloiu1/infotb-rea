@@ -3,9 +3,12 @@
 Reconstrucție ușoară și fidelă **1:1** a interfeței oficiale **InfoTB** (`https://info.stb.ro/`), realizată cu **REA (Reverse Engineer Anything)** și alimentată de **API-ul TPBI** (`https://maps.mo-bi.ro/api/*`), **fără autentificare / cont și fără modulul de plăți / bilete / carduri**.
 
 - **Web Live (GitHub Pages)**: [https://dodoloiu1.github.io/infotb-rea/](https://dodoloiu1.github.io/infotb-rea/)
-- **Android APK**: disponibil în secțiunea [Releases (`v1.0.0`)](https://github.com/dodoloiu1/infotb-rea/releases)
+- **Android APK**: disponibil în secțiunea [Releases (`v1.1.0`)](https://github.com/dodoloiu1/infotb-rea/releases)
 
-## Funcționalități
+## Funcționalități (v1.1)
+
+- **Selecție Multiplă Simultană de Linii**: posibilitate de a selecta oricâte linii simultan (trasee polilinii suprapuse colorate și toate vehiculele GPS live afișate în paralel pe hartă), bară flotantă de control cu eliminare individuală (`×`) pentru fiecare linie și buton rapid de „Șterge toate” pentru a face toate liniile să dispară instant.
+- **Clustering inteligent la zoom-out**: grupare automată a stațiilor la dezoom și ascundere curată peste 15% din București.
 
 - **Hartă interactivă implicită (Zero API Key)**: randare rapidă pe Canvas (Leaflet + OpenStreetMap argintiu) cu toate cele **3.878 de stații** STB / TPBI / Metrorex și inelele oficiale pe categorii (`#df2027` tramvai/autobuz, `#1565c0` troleibuz/regional, `#1b6e2b` metrou).
 - **Vehicule în timp real prin GPS TPBI**: poziții live din `https://maps.mo-bi.ro/api/busData` pentru tramvaie, troleibuze, autobuze urbane, linii regionale și de noapte (`203` linii).

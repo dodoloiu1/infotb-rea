@@ -45,7 +45,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { CloseXSvg } from './components/OfficialSvgs';
 
 const REFRESH_CYCLE_SECONDS = 20;
-const MAX_LINES_LIMIT = 3;
+const MAX_LINES_LIMIT = 50;
 
 function getTodayIso(): string {
   const d = new Date();
@@ -301,9 +301,22 @@ export function App() {
     [data, inspectedLine, showToast, t]
   );
 
+  const handleRemoveSingleLine = useCallback(
+    (lineName: string) => {
+      setSelectedLineNames(prev => {
+        const next = prev.filter(n => n !== lineName);
+        if (inspectedLine?.name === lineName) {
+          setInspectedLine(next.length > 0 ? data?.lineByName.get(next[next.length - 1]) || null : null);
+        }
+        return next;
+      });
+    },
+    [data, inspectedLine]
+  );
+
   const handleFocusSingleLine = useCallback(
     (line: TransitLine, dir?: 0 | 1) => {
-      setSelectedLineNames([line.name]);
+      setSelectedLineNames(prev => (prev.includes(line.name) ? prev : [...prev, line.name]));
       setLineDirectionFilter(dir === 0 ? 'tur' : dir === 1 ? 'retur' : 'both');
       setInspectedLine(line);
       pushHistory({
@@ -701,6 +714,9 @@ export function App() {
           onDragEndpoint={handleDragEndpoint}
           onChangeDirectionFilter={setLineDirectionFilter}
           onRequestMyLocation={handleRequestMyLocation}
+          onRemoveLine={handleRemoveSingleLine}
+          onResetLines={handleResetLines}
+          onInspectLine={setInspectedLine}
         />
 
         {/* Top-left floating search bar ("Unde vrei să mergi?") when drawer is closed */}
@@ -709,9 +725,11 @@ export function App() {
             data={data}
             favorites={favorites}
             history={history}
+            selectedLineNames={selectedLineNames}
             t={t}
             onSelectStop={handleSelectStop}
-            onSelectLine={ln => handleFocusSingleLine(ln)}
+            onSelectLine={line => handleFocusSingleLine(line)}
+            onToggleLine={handleToggleLine}
             onSelectPlaceForDirections={handleDirectionsToTarget}
             onToggleFavoriteStop={handleToggleFavoriteStop}
             onToggleFavoriteLine={handleToggleFavoriteLine}
